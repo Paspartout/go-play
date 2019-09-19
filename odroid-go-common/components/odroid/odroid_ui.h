@@ -210,7 +210,7 @@ void DoStartupPost();
 
 #define ODROID_UI_BATTERY_INIT                      \
     int battery_counter = 1000;                     \
-    int battery_percentage_old = 0;                 \ 
+    int battery_percentage_old = 0;                 \
     odroid_battery_state battery_state;             \
     bool battery_draw = false;                      \
     odroid_input_battery_level_read(&battery_state);

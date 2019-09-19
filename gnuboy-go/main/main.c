@@ -52,10 +52,10 @@ uint16_t* framebuffer;
 int frame = 0;
 uint elapsedTime = 0;
 
-int32_t* audioBuffer[2];
-volatile uint8_t currentAudioBuffer = 0;
-volatile uint16_t currentAudioSampleCount;
-volatile int16_t* currentAudioBufferPtr;
+int16_t* audioBuffer[2];
+uint8_t currentAudioBuffer = 0;
+uint16_t currentAudioSampleCount;
+int16_t* currentAudioBufferPtr;
 
 odroid_battery_state battery_state;
 
@@ -113,7 +113,7 @@ void run_to_vblank()
       currentBuffer = currentBuffer ? 0 : 1;
       framebuffer = displayBuffer[currentBuffer];
 
-      fb.ptr = framebuffer;
+      fb.ptr = (uint8_t*)framebuffer;
   }
 
   rtc_tick();
@@ -125,7 +125,7 @@ void run_to_vblank()
         currentAudioBufferPtr = audioBuffer[currentAudioBuffer];
         currentAudioSampleCount = pcm.pos;
 
-        void* tempPtr = 0x1234;
+        void* tempPtr = (void*)0x1234;
         xQueueSend(audioQueue, &tempPtr, portMAX_DELAY);
 
         // Swap buffers
@@ -157,8 +157,6 @@ bool previous_scale_enabled = true;
 
 void videoTask(void *arg)
 {
-  esp_err_t ret;
-
   videoTaskIsRunning = true;
 
   uint16_t* param;
@@ -166,7 +164,7 @@ void videoTask(void *arg)
   {
         xQueuePeek(vidQueue, &param, portMAX_DELAY);
 
-        if (param == 1)
+        if ((int)param == 1)
             break;
 
         if (previous_scale_enabled != scaling_enabled)
@@ -214,7 +212,7 @@ void audioTask(void* arg)
         // TODO: determine if this is still needed
         abort();
     }
-    else if (param == 1)
+    else if ((int)param == 1)
     {
         break;
     }
@@ -256,8 +254,7 @@ bool QuickLoadState(FILE *f)
 
 void DoMenuHome(bool save)
 {
-    esp_err_t err;
-    uint16_t* param = 1;
+    uint16_t* param = (uint16_t*)1;
 
     // Clear audio to prevent studdering
     printf("PowerDown: stopping audio.\n");
@@ -411,7 +408,7 @@ void app_main(void)
   	fb.pelsize = 2;
   	fb.pitch = fb.w * fb.pelsize;
   	fb.indexed = 0;
-  	fb.ptr = framebuffer;
+	fb.ptr = (uint8_t*)framebuffer;
   	fb.enabled = 1;
   	fb.dirty = 0;
 
@@ -447,10 +444,11 @@ void app_main(void)
     odroid_gamepad_state lastJoysticState;
 
     scaling_enabled = odroid_settings_ScaleDisabled_get(ODROID_SCALE_DISABLE_GB) ? false : true;
+    pal_set(odroid_settings_GBPalette_get());
 
     odroid_input_gamepad_read(&lastJoysticState);
     
-    	QuickSaveSetBuffer( (void*)(0x3f800000 + (0x100000 * 3) + (0x100000 / 2)));
+    QuickSaveSetBuffer( (void*)(0x3f800000 + (0x100000 * 3) + (0x100000 / 2)));
     ODROID_UI_MENU_HANDLER_INIT_V1(lastJoysticState)
 
     while (true)
@@ -507,7 +505,6 @@ void app_main(void)
 
 
         lastJoysticState = joystick;
-
 
         if (stopTime > startTime)
           elapsedTime = (stopTime - startTime);
