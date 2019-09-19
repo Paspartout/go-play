@@ -56,3 +56,11 @@ void odroid_settings_AudioSink_set(ODROID_AUDIO_SINK value);
 
 int32_t odroid_settings_GBPalette_get();
 void odroid_settings_GBPalette_set(int32_t value);
+
+int32_t odroid_settings_ScaleStretch_get();
+void odroid_settings_ScaleStretch_set(int32_t value);
+
+int32_t odroid_settings_PartialUpdates_get();
+void odroid_settings_PartialUpdates_set(int32_t value);
+
+

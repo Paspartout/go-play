@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <esp_attr.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 struct lcd lcd;
 
@@ -75,6 +76,9 @@ static int nr_of_palettes = 8;
 					
 static int sprsort = 1;
 static int sprdebug = 0;
+
+// Imported from main.c
+extern bool enable_partial_updates;
 
 // BGR
 #if 0
@@ -677,8 +681,8 @@ void IRAM_ATTR lcd_refreshline()
 {
 	byte *dest;
 
-	if ((frame % 7) == 0) ++frame;
-
+	/* Why was this line here? */
+	/* if ((frame % 7) == 0) ++frame; */
 
 	L = R_LY;
 	X = R_SCX;
@@ -694,7 +698,7 @@ void IRAM_ATTR lcd_refreshline()
 	WT = (L - WY) >> 3;
 	WV = (L - WY) & 7;
 
-	if ((frame % 2) == 0)
+	if (enable_partial_updates ? true : (frame % 2) == 0)
 	{
 		if (!(R_LCDC & 0x80))
 		{
@@ -736,10 +740,14 @@ void IRAM_ATTR lcd_refreshline()
 		dest = vdest;
 
 		int cnt = 160;
-		un16* dst = (un16*)dest;
 		byte* src = BUF;
 
-		while (cnt--) *(dst++) = PAL2[*(src++)];
+		if (enable_partial_updates) {
+			memcpy(dest, src, cnt);
+		} else {
+			un16* dst = (un16*)dest;
+			while (cnt--) *(dst++) = PAL2[*(src++)];
+		}
 	}
 
 	vdest += fb.pitch;
@@ -838,6 +846,14 @@ void pal_set(int palette)
 void pal_next()
 {
 	pal_set(current_palette + 1);
+}
+
+void pal_prev()
+{
+	if (--current_palette <= 0) {
+		current_palette = 0;
+	}
+	pal_set(current_palette);
 }
 
 int pal_get()

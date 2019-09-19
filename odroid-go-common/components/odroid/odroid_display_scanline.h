@@ -194,7 +194,9 @@ ili9341_write_frame_8bit(uint8_t* buffer, odroid_scanline *diff,
 #if 0
     if (diff) {
         int n_pixels = odroid_buffer_diff_count(diff, height);
-        if (n_pixels * scale > PARTIAL_UPDATE_THRESHOLD) {
+		printf("n_pixels: %d\n", n_pixels);
+        if (n_pixels > PARTIAL_UPDATE_THRESHOLD) {
+			printf("Doing full write\n");
             diff = NULL;
         }
     }
@@ -413,6 +415,7 @@ odroid_buffer_diff(uint8_t *buffer, uint8_t *old_buffer,
     odroid_buffer_diff_internal(buffer, old_buffer, palette, old_palette,
                                 width, height, stride, pixel_mask,
                                 palette_shift_mask, out_diff);
+
     odroid_buffer_diff_optimize(out_diff, height);
 }
 

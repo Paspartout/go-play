@@ -66,6 +66,8 @@ const char* StateFileName = "/storage/gnuboy.sav";
 
 #define AUDIO_SAMPLE_RATE (32000)
 
+#define PIXEL_MASK 0x3F
+
 const char* SD_BASE_PATH = "/sd";
 
 // --- MAIN
@@ -83,9 +85,46 @@ int pcm_submit()
 
 
 int BatteryPercent = 100;
+bool enable_partial_updates = false;
+bool force_screen_update = false;
+bool force_clear = false;
+bool stretch_screen = false;
+
+typedef enum {
+    // Full update, like the original gnuboy
+    UPDATE_FULL,
+    // Experimental Partial update with palette diffing
+    UPDATE_PARTIAL,
+} update_type_t;
+
+struct display_update_full {
+    update_type_t type;
+
+    uint16_t* buffer;
+};
+
+struct display_update_partial {
+    update_type_t type;
+
+    odroid_scanline diff[GAMEBOY_HEIGHT];
+    uint8_t *buffer;
+    uint16_t palette[64];
+    int stride;
+};
+
+// Can hold either full or partial update
+typedef union {
+    update_type_t type;
+    struct display_update_partial partial;
+    struct display_update_full full;
+} display_update_t;
 
 
-void run_to_vblank()
+display_update_t update1 = {0, };
+display_update_t update2 = {0, };
+display_update_t *current_update = &update2;
+
+void run_to_vblank(bool display_frame)
 {
   /* FRAME BEGIN */
 
@@ -105,9 +144,34 @@ void run_to_vblank()
   /* VBLANK BEGIN */
 
   //vid_end();
-  if (((frame % 2) == 0 && !config_speedup) || (frame % 10) == 0)
+  
+  if (display_frame)
   {
-      xQueueSend(vidQueue, &framebuffer, portMAX_DELAY);
+      if (enable_partial_updates) {
+		  display_update_t* old_update = current_update;
+
+		  // Swap updates
+		  current_update = (current_update == &update1) ? &update2 : &update1;
+
+          current_update->type = UPDATE_PARTIAL;
+
+          current_update->partial.buffer = (uint8_t*)framebuffer;
+          current_update->partial.stride = fb.pitch;
+          memcpy(current_update->partial.palette, scan.pal2, 64 * sizeof(uint16_t));
+
+	      odroid_buffer_diff(current_update->partial.buffer,
+                  old_update->partial.buffer, current_update->partial.palette, old_update->partial.palette,
+			  GAMEBOY_WIDTH, GAMEBOY_HEIGHT,
+			  current_update->partial.stride, PIXEL_MASK, 0, current_update->partial.diff);
+
+      } else {
+          current_update->type = UPDATE_FULL;
+          current_update->full.buffer = framebuffer;
+      }
+
+	  // NOTE: This takes and causes sound issues because
+	  // for large updates the videoTask is still busy and blocking this
+	  xQueueSend(vidQueue, &current_update, portMAX_DELAY);
 
       // swap buffers
       currentBuffer = currentBuffer ? 0 : 1;
@@ -155,29 +219,65 @@ volatile bool videoTaskIsRunning = false;
 bool scaling_enabled = true;
 bool previous_scale_enabled = true;
 
+static void update_scaling() {
+    if (scaling_enabled) {
+        odroid_display_set_scale(GAMEBOY_WIDTH, GAMEBOY_HEIGHT, stretch_screen ? 1.2f : 1.0f);
+    } else {
+        odroid_display_reset_scale(GAMEBOY_WIDTH, GAMEBOY_HEIGHT);
+    }
+}
+
 void videoTask(void *arg)
 {
   videoTaskIsRunning = true;
+  uint16_t display_palette[64] = {0, };
+  update_type_t old_update_type = UPDATE_FULL;
 
-  uint16_t* param;
+  display_update_t* update;
   while(1)
   {
-        xQueuePeek(vidQueue, &param, portMAX_DELAY);
+        xQueuePeek(vidQueue, &update, portMAX_DELAY);
 
-        if ((int)param == 1)
+        if ((int)update == 1)
             break;
 
-        if (previous_scale_enabled != scaling_enabled)
-        {
-            // Clear display
-            ili9341_write_frame_gb(NULL, true);
+        const bool scale_changed = previous_scale_enabled != scaling_enabled;
+        if (scale_changed) {
             previous_scale_enabled = scaling_enabled;
+			update_scaling();
+        }
+        const bool video_path_changed = update->type != old_update_type; 
+        if (video_path_changed) {
+            old_update_type = update->type;
+        }
+        const bool clear_display = scale_changed || video_path_changed || force_clear;
+		if (clear_display)
+		{
+			ili9341_clear(0x0000);
+			force_clear = false;
+		}
+        if (update->type == UPDATE_FULL) {
+            // Full update video path
+            
+            ili9341_write_frame_gb(update->full.buffer, scaling_enabled);
+        } else {
+			for(int i = 0; i < PIXEL_MASK+1; i++) {
+				const uint16_t pix = update->partial.palette[i];
+				display_palette[i] =  pix << 8 | pix >> 8;
+			}
+
+			ili9341_write_frame_8bit(update->partial.buffer,
+					force_screen_update ? NULL : update->partial.diff,
+					GAMEBOY_WIDTH, GAMEBOY_HEIGHT, fb.pitch, PIXEL_MASK, display_palette);
+
+			if (force_screen_update) {
+				force_screen_update = false;
+			}
         }
 
-        ili9341_write_frame_gb(param, scaling_enabled);
         odroid_input_battery_level_read(&battery_state);
 
-        xQueueReceive(vidQueue, &param, portMAX_DELAY);
+        xQueueReceive(vidQueue, &update, portMAX_DELAY);
     }
 
 
@@ -279,7 +379,11 @@ void menu_gb_pal_update(odroid_ui_entry *entry) {
 }
 
 odroid_ui_func_toggle_rc menu_gb_pal_toggle(odroid_ui_entry *entry, odroid_gamepad_state *joystick) {
-    pal_next();
+    if (joystick->values[ODROID_INPUT_RIGHT] || joystick->values[ODROID_INPUT_A]) {
+		pal_next();
+    } else if (joystick->values[ODROID_INPUT_LEFT]) {
+		pal_prev();
+    }
     odroid_settings_GBPalette_set(pal_get());
     menu_restart_timer = 4;
     return ODROID_UI_FUNC_TOGGLE_RC_MENU_RESTART;
@@ -326,11 +430,47 @@ odroid_ui_func_toggle_rc menu_gb_rtc_minute_toggle(odroid_ui_entry *entry, odroi
     return ODROID_UI_FUNC_TOGGLE_RC_CHANGED;
 }
 
+void menu_gb_partial_updates_update(odroid_ui_entry *entry) {
+    sprintf(entry->text, "%-9s: %s", "partial", enable_partial_updates ? "on" : "off");
+}
+
+odroid_ui_func_toggle_rc menu_gb_partial_updates_toggle(odroid_ui_entry *entry, odroid_gamepad_state *joystick) {
+	enable_partial_updates = !enable_partial_updates;
+	odroid_settings_PartialUpdates_set(enable_partial_updates);
+    return ODROID_UI_FUNC_TOGGLE_RC_CHANGED;
+}
+
+void menu_gb_stretch_update(odroid_ui_entry *entry) {
+	const char *text;
+	if (enable_partial_updates) {
+		text = stretch_screen ? "on" : "off";
+	} else {
+		text = "unavail";
+	}
+    sprintf(entry->text, "%-9s: %s", "stretch", text);
+}
+
+odroid_ui_func_toggle_rc menu_gb_stretch_toggle(odroid_ui_entry *entry, odroid_gamepad_state *joystick) {
+	if (!enable_partial_updates)
+		return ODROID_UI_FUNC_TOGGLE_RC_NOTHING;
+	stretch_screen = !stretch_screen;
+	force_clear = true;
+	update_scaling();
+	odroid_settings_ScaleStretch_set(enable_partial_updates);
+    return ODROID_UI_FUNC_TOGGLE_RC_CHANGED;
+
+    menu_restart_timer = 4;
+    return ODROID_UI_FUNC_TOGGLE_RC_MENU_RESTART;
+}
+
 void menu_gb_init(odroid_ui_window *window) {
     odroid_ui_create_entry(window, &menu_gb_pal_update, &menu_gb_pal_toggle);
     odroid_ui_create_entry(window, &menu_gb_rtc_day_update, &menu_gb_rtc_day_toggle);
     odroid_ui_create_entry(window, &menu_gb_rtc_hour_update, &menu_gb_rtc_hour_toggle);
     odroid_ui_create_entry(window, &menu_gb_rtc_minute_update, &menu_gb_rtc_minute_toggle);
+
+    odroid_ui_create_entry(window, &menu_gb_partial_updates_update, &menu_gb_partial_updates_toggle);
+    odroid_ui_create_entry(window, &menu_gb_stretch_update, &menu_gb_stretch_toggle);
 }
 
 void app_main(void)
@@ -386,8 +526,8 @@ void app_main(void)
     vidQueue = xQueueCreate(1, sizeof(uint16_t*));
     audioQueue = xQueueCreate(1, sizeof(uint16_t*));
 
-    xTaskCreatePinnedToCore(&videoTask, "videoTask", 1024, NULL, 5, NULL, 1);
-    xTaskCreatePinnedToCore(&audioTask, "audioTask", 2048, NULL, 5, NULL, 1); //768
+    xTaskCreatePinnedToCore(&videoTask, "videoTask", 2048, NULL, 5, NULL, 1);
+    xTaskCreatePinnedToCore(&audioTask, "audioTask", 2048, NULL, 6, NULL, 1); //768
 
 
     //debug_trace = 1;
@@ -441,10 +581,15 @@ void app_main(void)
     uint stopTime;
     uint totalElapsedTime = 0;
     uint actualFrameCount = 0;
+	uint skippedFrames = 0;
+	bool display_frame = true;
     odroid_gamepad_state lastJoysticState;
 
     scaling_enabled = odroid_settings_ScaleDisabled_get(ODROID_SCALE_DISABLE_GB) ? false : true;
+	stretch_screen = odroid_settings_ScaleStretch_get();
+	enable_partial_updates = odroid_settings_PartialUpdates_get();
     pal_set(odroid_settings_GBPalette_get());
+	update_scaling();
 
     odroid_input_gamepad_read(&lastJoysticState);
     
@@ -466,18 +611,21 @@ void app_main(void)
             do {
               
               menu_restart = odroid_ui_menu_ext(menu_restart, &menu_gb_init);
-              uint8_t tmp = currentBuffer ? 0 : 1;
-              xQueueSend(vidQueue, &displayBuffer[tmp], portMAX_DELAY);
+			  if (enable_partial_updates) {
+				  force_screen_update = true;
+			  } else {
+				  xQueueSend(vidQueue, &current_update, portMAX_DELAY);
+			  }
             } while(menu_restart_timer == 0 && menu_restart);
             }
         }
-
 
         // Scaling
         if (joystick.values[ODROID_INPUT_START] && !lastJoysticState.values[ODROID_INPUT_RIGHT] && joystick.values[ODROID_INPUT_RIGHT])
         {
             scaling_enabled = !scaling_enabled;
             odroid_settings_ScaleDisabled_set(ODROID_SCALE_DISABLE_GB, scaling_enabled ? 0 : 1);
+			force_screen_update = true;
         }
 
 		// Cycle through palets
@@ -498,11 +646,19 @@ void app_main(void)
         pad_set(PAD_A, joystick.values[ODROID_INPUT_A]);
         pad_set(PAD_B, joystick.values[ODROID_INPUT_B]);
 
+        if (!enable_partial_updates) {
+            display_frame = config_speedup ? (frame % 10) == 0 : (frame % 2) == 0;
+        }
 
         startTime = xthal_get_ccount();
-        run_to_vblank();
+        run_to_vblank(display_frame);
         stopTime = xthal_get_ccount();
 
+        // Cycle budget we can spend to emulate one frame to reach roughly 60 fps
+        const int frameTime = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ * 1000000 / 55;
+        // Figure out if we should skip next frame
+        display_frame = (elapsedTime > frameTime) ? false : true;
+        skippedFrames += display_frame ? 0 : 1;
 
         lastJoysticState = joystick;
 
@@ -515,15 +671,17 @@ void app_main(void)
         ++frame;
         ++actualFrameCount;
 
+		// TODO: Skip on release to save some more cycles?
         if (actualFrameCount == 60)
         {
           float seconds = totalElapsedTime / (CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ * 1000000.0f); // 240000000.0f; // (240Mhz)
           float fps = actualFrameCount / seconds;
 
-          printf("HEAP:0x%x, FPS:%f, BATTERY:%d [%d]\n", esp_get_free_heap_size(), fps, battery_state.millivolts, battery_state.percentage);
-
-          actualFrameCount = 0;
+		printf("GAME_FPS:%f, DISPLAYED_FPS: %d, SKIPPED_FRAMES: %d, BATTERY:%d [%d]\n", 
+				fps, (int)fps-skippedFrames, skippedFrames, battery_state.millivolts, battery_state.percentage);
+	  actualFrameCount = 0;
           totalElapsedTime = 0;
+		  skippedFrames = 0;
         }
     }
 }

@@ -21,6 +21,9 @@ static const char* NvsKey_ScaleDisabled = "ScaleDisabled";
 static const char* NvsKey_AudioSink = "AudioSink";
 static const char* NvsKey_GBPalette = "GBPalette";
 
+static const char* NvsKey_ScaleStretch = "ScaleStretch";
+static const char* NvsKey_PartialUpdates = "PartialUpdates";
+
 char* odroid_util_GetFileName(const char* path)
 {
 	int length = strlen(path);
@@ -512,6 +515,7 @@ int32_t odroid_settings_GBPalette_get()
 
     return result;
 }
+
 void odroid_settings_GBPalette_set(int32_t value)
 {
     // Open
@@ -526,3 +530,76 @@ void odroid_settings_GBPalette_set(int32_t value)
     // Close
     nvs_close(my_handle);
 }
+
+int32_t odroid_settings_ScaleStretch_get()
+{
+    // Open
+    nvs_handle my_handle;
+    esp_err_t err = nvs_open(NvsNamespace, NVS_READWRITE, &my_handle);
+    if (err != ESP_OK) abort();
+
+    // Read
+	int result;
+    err = nvs_get_i32(my_handle, NvsKey_ScaleStretch, &result);
+    if (err == ESP_OK)
+    {
+        printf("odroid_settings_ScaleStretch_get: value=%d\n", result);
+    }
+
+    // Close
+    nvs_close(my_handle);
+
+    return result;
+}
+
+void odroid_settings_ScaleStretch_set(int32_t value)
+{
+    // Open
+    nvs_handle my_handle;
+    esp_err_t err = nvs_open(NvsNamespace, NVS_READWRITE, &my_handle);
+    if (err != ESP_OK) abort();
+
+    // Read
+    err = nvs_set_i32(my_handle, NvsKey_ScaleStretch, value);
+    if (err != ESP_OK) abort();
+
+    // Close
+    nvs_close(my_handle);
+}
+
+int32_t odroid_settings_PartialUpdates_get()
+{
+    // Open
+    nvs_handle my_handle;
+    esp_err_t err = nvs_open(NvsNamespace, NVS_READWRITE, &my_handle);
+    if (err != ESP_OK) abort();
+
+    // Read
+	int result;
+    err = nvs_get_i32(my_handle, NvsKey_PartialUpdates, &result);
+    if (err == ESP_OK)
+    {
+        printf("odroid_settings_PartialUpdates_get: value=%d\n", result);
+    }
+
+    // Close
+    nvs_close(my_handle);
+
+    return result;
+}
+
+void odroid_settings_PartialUpdates_set(int32_t value)
+{
+    // Open
+    nvs_handle my_handle;
+    esp_err_t err = nvs_open(NvsNamespace, NVS_READWRITE, &my_handle);
+    if (err != ESP_OK) abort();
+
+    // Read
+    err = nvs_set_i32(my_handle, NvsKey_PartialUpdates, value);
+    if (err != ESP_OK) abort();
+
+    // Close
+    nvs_close(my_handle);
+}
+

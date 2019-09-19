@@ -54,6 +54,7 @@ void pal_write_dmg(int i, int mapnum, byte d);
 void vram_write(int a, byte b);
 void pal_dirty();
 void pal_next();
+void pal_prev();
 void pal_set(int palette);
 int pal_get();
 void vram_dirty();
