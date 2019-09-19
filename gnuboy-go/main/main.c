@@ -107,6 +107,7 @@ struct display_update_partial {
     update_type_t type;
 
     odroid_scanline diff[GAMEBOY_HEIGHT];
+	bool force_full_update;
     uint8_t *buffer;
     uint16_t palette[64];
     int stride;
@@ -123,6 +124,8 @@ typedef union {
 display_update_t update1 = {0, };
 display_update_t update2 = {0, };
 display_update_t *current_update = &update2;
+bool skipFrames = false;
+int cntr = 0;
 
 void run_to_vblank(bool display_frame)
 {
@@ -159,19 +162,54 @@ void run_to_vblank(bool display_frame)
           current_update->partial.stride = fb.pitch;
           memcpy(current_update->partial.palette, scan.pal2, 64 * sizeof(uint16_t));
 
+
 	      odroid_buffer_diff(current_update->partial.buffer,
                   old_update->partial.buffer, current_update->partial.palette, old_update->partial.palette,
 			  GAMEBOY_WIDTH, GAMEBOY_HEIGHT,
 			  current_update->partial.stride, PIXEL_MASK, 0, current_update->partial.diff);
 
+		   // TODO: determine right threshold and make it dependend on scale setting
+		  const int threshold = (160*144)/2.5;
+		  int n_pixels = odroid_buffer_diff_count(current_update->partial.diff, GAMEBOY_HEIGHT);
+
+		  // State machine that does automatic frame skipping
+		  current_update->partial.force_full_update = false;
+		  if (skipFrames) {
+
+			  if (n_pixels < threshold) {
+				  // Switch back to diffing when there are less pixels changed
+				  if (++cntr > 6) {
+					  printf("Switch back to partial updates\n");
+					  cntr = 0;
+					  skipFrames = false;
+				  }
+			  } else {
+				  cntr = 0;
+			  }
+
+			  if (frame % 2 == 0) {
+				  current_update->partial.force_full_update = true;
+				  xQueueSend(vidQueue, &current_update, portMAX_DELAY);
+			  }
+
+		  } else {
+
+			  // Switch to frameskipping when too many pixels change
+			  if (n_pixels > threshold) {
+				  printf("Switch to skipFrames\n");
+				  skipFrames = true;
+				  cntr = 0;
+			  } else {
+				  xQueueSend(vidQueue, &current_update, portMAX_DELAY);
+			  }
+
+		  }
+
       } else {
           current_update->type = UPDATE_FULL;
           current_update->full.buffer = framebuffer;
+		  xQueueSend(vidQueue, &current_update, portMAX_DELAY);
       }
-
-	  // NOTE: This takes and causes sound issues because
-	  // for large updates the videoTask is still busy and blocking this
-	  xQueueSend(vidQueue, &current_update, portMAX_DELAY);
 
       // swap buffers
       currentBuffer = currentBuffer ? 0 : 1;
@@ -267,7 +305,7 @@ void videoTask(void *arg)
 			}
 
 			ili9341_write_frame_8bit(update->partial.buffer,
-					force_screen_update ? NULL : update->partial.diff,
+					(force_screen_update || update->partial.force_full_update) ? NULL : update->partial.diff,
 					GAMEBOY_WIDTH, GAMEBOY_HEIGHT, fb.pitch, PIXEL_MASK, display_palette);
 
 			if (force_screen_update) {
@@ -613,8 +651,6 @@ void app_main(void)
               menu_restart = odroid_ui_menu_ext(menu_restart, &menu_gb_init);
 			  if (enable_partial_updates) {
 				  force_screen_update = true;
-			  } else {
-				  xQueueSend(vidQueue, &current_update, portMAX_DELAY);
 			  }
             } while(menu_restart_timer == 0 && menu_restart);
             }
@@ -648,14 +684,16 @@ void app_main(void)
 
         if (!enable_partial_updates) {
             display_frame = config_speedup ? (frame % 10) == 0 : (frame % 2) == 0;
-        }
+        } else {
+			display_frame = true;
+		}
 
         startTime = xthal_get_ccount();
         run_to_vblank(display_frame);
         stopTime = xthal_get_ccount();
 
         // Cycle budget we can spend to emulate one frame to reach roughly 60 fps
-        const int frameTime = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ * 1000000 / 55;
+        const int frameTime = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ * 1000000 / 50;
         // Figure out if we should skip next frame
         display_frame = (elapsedTime > frameTime) ? false : true;
         skippedFrames += display_frame ? 0 : 1;
