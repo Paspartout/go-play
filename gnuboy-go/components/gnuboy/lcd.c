@@ -10,6 +10,7 @@
 #include "lcd.h"
 #include "rc.h"
 #include "fb.h"
+#include "dmgpal.h"
 #ifdef USE_ASM
 #include "asm.h"
 #endif
@@ -80,7 +81,7 @@ static int sprdebug = 0;
 // Imported from main.c
 extern bool enable_partial_updates;
 
-// BGR
+/** // BGR
 #if 0
 // Testing/Debug palette
 static int dmg_pal[4][4] = {{0xffffff, 0x808080, 0x404040, 0x000000},
@@ -94,6 +95,7 @@ static int dmg_pal[4][4] = {{0xffffff, 0x808080, 0x404040, 0x000000},
 							GB_NGBARNE_PALETTE };
 
 #endif
+**/
 
 static byte *vdest;
 
