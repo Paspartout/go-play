@@ -272,8 +272,8 @@ void odroid_ui_volume_set(bool up)
 
 void odroid_ui_volume_onhome()
 {
-    odroid_audio_volume_set(2);
-    odroid_settings_Volume_set(2);
+    odroid_audio_volume_set(3);
+    odroid_settings_Volume_set(3);
 }
 
 void odroid_ui_clean_draw_buffer() {

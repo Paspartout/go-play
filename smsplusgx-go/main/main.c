@@ -200,6 +200,9 @@ void DoMenuHome(bool save)
     void *exitVideoTask = NULL;
     xQueueSend(vidQueue, &exitVideoTask, portMAX_DELAY);
     while (videoTaskIsRunning) { vTaskDelay(10); }
+    
+    //prevents go-play breaking from unexpected volume level on exit
+    odroid_ui_volume_onhome();
 
     DoReboot(save);
 }

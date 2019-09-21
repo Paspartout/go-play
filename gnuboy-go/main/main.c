@@ -408,6 +408,7 @@ void DoMenuHome(bool save)
     xQueueSend(vidQueue, &param, portMAX_DELAY);
     while (videoTaskIsRunning) {}
     
+    //prevents go-play breaking from unexpected volume level on exit
     odroid_ui_volume_onhome();
 
     DoReboot(save);

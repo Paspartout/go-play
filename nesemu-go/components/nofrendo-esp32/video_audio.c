@@ -350,6 +350,9 @@ void DoMenuHome(bool save)
     while (vidTaskIsRunning) { vTaskDelay(10); }
 
     //odroid_display_drain_spi();
+    
+    //prevents go-play breaking from unexpected volume level on exit
+    odroid_ui_volume_onhome();
 
     DoReboot(save);
 }
