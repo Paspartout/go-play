@@ -409,13 +409,11 @@ void DoMenuHome(bool save)
     while (videoTaskIsRunning) {}
     
     //prevents go-play breaking from unexpected volume level on exit
+    //todo save volume level & apply at next load
     odroid_ui_volume_onhome();
 
     DoReboot(save);
-    
-    //todo set volume at 3
-    //todo save volume level & apply at next load
-}
+    }
 
 uint menu_restart_timer = 0;
 
