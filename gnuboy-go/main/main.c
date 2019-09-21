@@ -127,6 +127,7 @@ display_update_t update2 = {0, };
 display_update_t *current_update = &update2;
 bool skipFrames = false;
 int cntr = 0;
+int field = 1;
 
 void run_to_vblank(bool display_frame)
 {
@@ -160,17 +161,25 @@ void run_to_vblank(bool display_frame)
           current_update->type = UPDATE_PARTIAL;
 
           current_update->partial.buffer = (uint8_t*)framebuffer;
-          current_update->partial.stride = fb.pitch;
+          current_update->partial.stride = GAMEBOY_WIDTH;
           memcpy(current_update->partial.palette, scan.pal2, 64 * sizeof(uint16_t));
-
 
 	      odroid_buffer_diff(current_update->partial.buffer,
                   old_update->partial.buffer, current_update->partial.palette, old_update->partial.palette,
 			  GAMEBOY_WIDTH, GAMEBOY_HEIGHT,
 			  current_update->partial.stride, PIXEL_MASK, 0, current_update->partial.diff);
 
+
+		  /* TODO: Figure out why interlacing doesnt work quite right. */
+		  /* field = 1 - field; */
+	      /* odroid_buffer_diff_interlaced(current_update->partial.buffer, */
+                  /* old_update->partial.buffer, current_update->partial.palette, old_update->partial.palette, */
+			  /* GAMEBOY_WIDTH, GAMEBOY_HEIGHT, */
+			  /* current_update->partial.stride, PIXEL_MASK, 0, field, current_update->partial.diff, old_update->partial.diff); */
+
+
 		   // TODO: determine right threshold and make it dependend on scale setting
-		  const int threshold = (160*144)/2.5;
+		  const int threshold = 7000;
 		  int n_pixels = odroid_buffer_diff_count(current_update->partial.diff, GAMEBOY_HEIGHT);
 
 		  // State machine that does automatic frame skipping
@@ -188,22 +197,22 @@ void run_to_vblank(bool display_frame)
 				  cntr = 0;
 			  }
 
-			  if (frame % 2 == 0) {
+			  if ((frame % 2 == 0) || !skipFrames) {
 				  current_update->partial.force_full_update = true;
 				  xQueueSend(vidQueue, &current_update, portMAX_DELAY);
 			  }
-
 		  } else {
-
+			  xQueueSend(vidQueue, &current_update, portMAX_DELAY);
 			  // Switch to frameskipping when too many pixels change
 			  if (n_pixels > threshold) {
-				  printf("Switch to skipFrames\n");
-				  skipFrames = true;
-				  cntr = 0;
+				  if (++cntr > 4) {
+					  printf("Switch to skipFrames\n");
+					  cntr = 0;
+					  skipFrames = true;
+				  }
 			  } else {
-				  xQueueSend(vidQueue, &current_update, portMAX_DELAY);
+				  cntr = 0;
 			  }
-
 		  }
 
       } else {
@@ -307,7 +316,7 @@ void videoTask(void *arg)
 
 			ili9341_write_frame_8bit(update->partial.buffer,
 					(force_screen_update || update->partial.force_full_update) ? NULL : update->partial.diff,
-					GAMEBOY_WIDTH, GAMEBOY_HEIGHT, fb.pitch, PIXEL_MASK, display_palette);
+					GAMEBOY_WIDTH, GAMEBOY_HEIGHT, update->partial.stride, PIXEL_MASK, display_palette);
 
 			if (force_screen_update) {
 				force_screen_update = false;

@@ -736,7 +736,11 @@ void IRAM_ATTR lcd_refreshline()
 		}
 	}
 
-	vdest += fb.pitch;
+	if (enable_partial_updates) {
+		vdest += 160;
+	} else {
+		vdest += fb.pitch;
+	}
 }
 
 //void change_palette(int i)
