@@ -81,22 +81,6 @@ static int sprdebug = 0;
 // Imported from main.c
 extern bool enable_partial_updates;
 
-/** // BGR
-#if 0
-// Testing/Debug palette
-static int dmg_pal[4][4] = {{0xffffff, 0x808080, 0x404040, 0x000000},
-							{0xff0000, 0x800000, 0x400000, 0x000000},
-							{0x00ff00, 0x008000, 0x004000, 0x000000},
-							{0x0000ff, 0x000080, 0x000040, 0x000000} };
-#else
- static int dmg_pal[4][4] = {GB_NGBARNE_PALETTE,
-	 						GB_NGBARNE_PALETTE,
-							GB_NGBARNE_PALETTE,
-							GB_NGBARNE_PALETTE };
-
-#endif
-**/
-
 static byte *vdest;
 
 //#ifdef ALLOW_UNALIGNED_IO /* long long is ok since this is i386-only anyway? */
