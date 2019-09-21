@@ -407,8 +407,13 @@ void DoMenuHome(bool save)
 
     xQueueSend(vidQueue, &param, portMAX_DELAY);
     while (videoTaskIsRunning) {}
+    
+    odroid_ui_volume_onhome();
 
     DoReboot(save);
+    
+    //todo set volume at 3
+    //todo save volume level & apply at next load
 }
 
 uint menu_restart_timer = 0;
@@ -642,6 +647,7 @@ void app_main(void)
     
     QuickSaveSetBuffer( (void*)(0x3f800000 + (0x100000 * 3) + (0x100000 / 2)));
     ODROID_UI_MENU_HANDLER_INIT_V1(lastJoysticState)
+    
 
     while (true)
     {

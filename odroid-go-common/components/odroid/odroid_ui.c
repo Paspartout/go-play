@@ -270,6 +270,12 @@ void odroid_ui_volume_set(bool up)
     odroid_settings_Volume_set(old);
 }
 
+void odroid_ui_volume_onhome()
+{
+    odroid_audio_volume_set(2);
+    odroid_settings_Volume_set(2);
+}
+
 void odroid_ui_clean_draw_buffer() {
 	int size = 320 * 8 * sizeof(uint16_t);
 	memset(odroid_ui_framebuffer, 0, size);
