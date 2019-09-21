@@ -179,7 +179,7 @@ void run_to_vblank(bool display_frame)
 
 
 		   // TODO: determine right threshold and make it dependend on scale setting
-		  const int threshold = 7000;
+		  const int threshold = 16000;
 		  int n_pixels = odroid_buffer_diff_count(current_update->partial.diff, GAMEBOY_HEIGHT);
 
 		  // State machine that does automatic frame skipping
@@ -205,12 +205,8 @@ void run_to_vblank(bool display_frame)
 			  xQueueSend(vidQueue, &current_update, portMAX_DELAY);
 			  // Switch to frameskipping when too many pixels change
 			  if (n_pixels > threshold) {
-				  if (++cntr > 4) {
-					  printf("Switch to skipFrames\n");
-					  cntr = 0;
-					  skipFrames = true;
-				  }
-			  } else {
+				  printf("Switch to skipFrames because n_pixels: %d\n", n_pixels);
+				  skipFrames = true;
 				  cntr = 0;
 			  }
 		  }
