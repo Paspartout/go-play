@@ -410,7 +410,7 @@ void DoMenuHome(bool save)
     
     //prevents go-play breaking from unexpected volume level on exit
     //todo save volume level & apply at next load
-    odroid_ui_volume_onhome();
+    odroid_ui_volume_exit();
 
     DoReboot(save);
     }

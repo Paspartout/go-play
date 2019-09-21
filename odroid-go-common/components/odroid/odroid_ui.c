@@ -270,10 +270,10 @@ void odroid_ui_volume_set(bool up)
     odroid_settings_Volume_set(old);
 }
 
-void odroid_ui_volume_onhome()
+void odroid_ui_volume_exit()
 {
-    odroid_audio_volume_set(3);
-    odroid_settings_Volume_set(3);
+    odroid_audio_volume_set(ODROID_VOLUME_LEVEL3);
+    odroid_settings_Volume_set(ODROID_VOLUME_LEVEL3);
 }
 
 void odroid_ui_clean_draw_buffer() {
