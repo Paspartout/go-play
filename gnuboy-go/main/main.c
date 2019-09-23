@@ -165,11 +165,16 @@ void run_to_vblank(bool display_frame)
             memcpy(current_update->partial.palette, scan.pal2, 64 * sizeof(uint16_t));
 
             isNewFrame = true;
+            /*int interlace;
+            if (interlace_first_run) {
+                interlace = -1;
+            } else { interlace = 0; }*/
+                
 
-            odroid_buffer_diff(current_update->partial.buffer,
+            /*odroid_buffer_diff(current_update->partial.buffer,
                 old_update->partial.buffer, current_update->partial.palette, old_update->partial.palette,
                 GAMEBOY_WIDTH, GAMEBOY_HEIGHT,
-                current_update->partial.stride, PIXEL_MASK, 0, current_update->partial.diff);
+                current_update->partial.stride, PIXEL_MASK, 0, current_update->partial.diff);*/
 
 
 		  /* TODO: Figure out why interlacing doesnt work quite right. */
@@ -197,10 +202,10 @@ void run_to_vblank(bool display_frame)
 		  xQueueSend(vidQueue, &current_update, portMAX_DELAY);
         }
 
-        // swap buffers
+        //merge & swap buffers
         currentBuffer = currentBuffer ? 0 : 1;
         framebuffer = displayBuffer[currentBuffer];
-
+        
         fb.ptr = (uint8_t*)framebuffer;
   }
 
@@ -291,7 +296,7 @@ void videoTask(void *arg)
 			}
 
 			ili9341_write_frame_8bit(update->partial.buffer,
-					(force_screen_update || update->partial.force_full_update) ? NULL : update->partial.diff,
+					NULL,
 					GAMEBOY_WIDTH, GAMEBOY_HEIGHT, update->partial.stride, PIXEL_MASK, display_palette);
 
 			if (force_screen_update) {
