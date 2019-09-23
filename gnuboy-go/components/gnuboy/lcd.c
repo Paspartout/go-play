@@ -651,21 +651,24 @@ static void IRAM_ATTR spr_scan()
 	if (sprdebug) for (i = 0; i < NS; i++) BUF[i<<1] = 36;
 }
 
-
 inline void lcd_begin()
 {
 	vdest = fb.ptr;
 	WY = R_WY;
 }
 
-
 extern int frame;
 extern uint16_t* displayBuffer[2];
 int lastLcdDisabled = 0;
 
+extern bool interlace_first_run = true;
+extern bool isNewFrame = true;
+extern bool lcd_interlace = true;
+static bool interlace_this_line = true;
+
 void IRAM_ATTR lcd_refreshline()
-{
-	byte *dest;
+{	
+	byte *dest;	
 
 	/* Why was this line here? */
 	/* if ((frame % 7) == 0) ++frame; */
@@ -723,24 +726,41 @@ void IRAM_ATTR lcd_refreshline()
 		}
 		spr_scan();
 
-		dest = vdest;
+        //first run = skip first line
+		if (isNewFrame) {
+			if( interlace_first_run) {
+				interlace_this_line = false;
+			} else {
+				interlace_this_line = true;
+			}
+		}
+        isNewFrame = false;
+        
+        dest = vdest;
+
 
 		int cnt = 160;
 		byte* src = BUF;
 
 		if (enable_partial_updates) {
-			memcpy(dest, src, cnt);
+			if (lcd_interlace && interlace_this_line) {
+			} else {
+				memcpy(dest, src, cnt);
+			}
 		} else {
 			un16* dst = (un16*)dest;
 			while (cnt--) *(dst++) = PAL2[*(src++)];
 		}
+        
 	}
 
 	if (enable_partial_updates) {
-		vdest += 160;
+        vdest += 160;
 	} else {
 		vdest += fb.pitch;
 	}
+    interlace_this_line = !interlace_this_line;
+
 }
 
 //void change_palette(int i)

@@ -145,29 +145,31 @@ void run_to_vblank(bool display_frame)
     /* Step through visible line scanning phase */
     emu_step();
   }
-
+  interlace_first_run = !interlace_first_run;
   /* VBLANK BEGIN */
 
   //vid_end();
   
   if (display_frame)
   {
-      if (enable_partial_updates) {
-		  display_update_t* old_update = current_update;
+        if (enable_partial_updates) {
+            display_update_t* old_update = current_update;
 
-		  // Swap updates
-		  current_update = (current_update == &update1) ? &update2 : &update1;
+            // Swap updates
+            current_update = (current_update == &update1) ? &update2 : &update1;
 
-          current_update->type = UPDATE_PARTIAL;
+            current_update->type = UPDATE_PARTIAL;
 
-          current_update->partial.buffer = (uint8_t*)framebuffer;
-          current_update->partial.stride = GAMEBOY_WIDTH;
-          memcpy(current_update->partial.palette, scan.pal2, 64 * sizeof(uint16_t));
+            current_update->partial.buffer = (uint8_t*)framebuffer;
+            current_update->partial.stride = GAMEBOY_WIDTH;
+            memcpy(current_update->partial.palette, scan.pal2, 64 * sizeof(uint16_t));
 
-	      odroid_buffer_diff(current_update->partial.buffer,
-                  old_update->partial.buffer, current_update->partial.palette, old_update->partial.palette,
-			  GAMEBOY_WIDTH, GAMEBOY_HEIGHT,
-			  current_update->partial.stride, PIXEL_MASK, 0, current_update->partial.diff);
+            isNewFrame = true;
+
+            odroid_buffer_diff(current_update->partial.buffer,
+                old_update->partial.buffer, current_update->partial.palette, old_update->partial.palette,
+                GAMEBOY_WIDTH, GAMEBOY_HEIGHT,
+                current_update->partial.stride, PIXEL_MASK, 0, current_update->partial.diff);
 
 
 		  /* TODO: Figure out why interlacing doesnt work quite right. */
@@ -178,50 +180,28 @@ void run_to_vblank(bool display_frame)
 			  /* current_update->partial.stride, PIXEL_MASK, 0, field, current_update->partial.diff, old_update->partial.diff); */
 
 
-		   // TODO: determine right threshold and make it dependend on scale setting
+        /* // TODO: determine right threshold and make it dependend on scale setting
 		  const int threshold = 16000;
 		  int n_pixels = odroid_buffer_diff_count(current_update->partial.diff, GAMEBOY_HEIGHT);
+          
+          if (lcd_interlace) {
+              n_pixels = n_pixels * 2;
+         }*/
 
 		  // State machine that does automatic frame skipping
 		  current_update->partial.force_full_update = false;
-		  if (skipFrames) {
-
-			  if (n_pixels < threshold) {
-				  // Switch back to diffing when there are less pixels changed
-				  if (++cntr > 6) {
-					  printf("Switch back to partial updates\n");
-					  cntr = 0;
-					  skipFrames = false;
-				  }
-			  } else {
-				  cntr = 0;
-			  }
-
-			  if ((frame % 2 == 0) || !skipFrames) {
-				  current_update->partial.force_full_update = true;
-				  xQueueSend(vidQueue, &current_update, portMAX_DELAY);
-			  }
-		  } else {
-			  xQueueSend(vidQueue, &current_update, portMAX_DELAY);
-			  // Switch to frameskipping when too many pixels change
-			  if (n_pixels > threshold) {
-				  printf("Switch to skipFrames because n_pixels: %d\n", n_pixels);
-				  skipFrames = true;
-				  cntr = 0;
-			  }
-		  }
-
-      } else {
+          xQueueSend(vidQueue, &current_update, portMAX_DELAY);
+        } else {
           current_update->type = UPDATE_FULL;
           current_update->full.buffer = framebuffer;
 		  xQueueSend(vidQueue, &current_update, portMAX_DELAY);
-      }
+        }
 
-      // swap buffers
-      currentBuffer = currentBuffer ? 0 : 1;
-      framebuffer = displayBuffer[currentBuffer];
+        // swap buffers
+        currentBuffer = currentBuffer ? 0 : 1;
+        framebuffer = displayBuffer[currentBuffer];
 
-      fb.ptr = (uint8_t*)framebuffer;
+        fb.ptr = (uint8_t*)framebuffer;
   }
 
   rtc_tick();

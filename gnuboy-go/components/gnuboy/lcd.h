@@ -2,6 +2,7 @@
 #define __LCD_H__
 
 #include "defs.h"
+#include "stdbool.h"
 
 struct vissprite
 {
@@ -67,6 +68,11 @@ void lcdc_trans();
 void lcdc_change(byte b);
 void stat_write(byte b);
 void stat_trigger();
+
+//interlacing stuff
+extern bool lcd_interlace;
+extern bool interlace_first_run;
+extern bool isNewFrame;
 
 
 #endif
