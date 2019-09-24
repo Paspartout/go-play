@@ -53,6 +53,9 @@ uint16_t* framebuffer;
 int frame = 0;
 uint elapsedTime = 0;
 
+static bool no_skips = false;
+bool use_interlacing = false;
+
 int16_t* audioBuffer[2];
 uint8_t currentAudioBuffer = 0;
 uint16_t currentAudioSampleCount;
@@ -110,7 +113,7 @@ struct display_update_partial {
     odroid_scanline diff[GAMEBOY_HEIGHT];
 	bool force_full_update;
     uint8_t *buffer;
-    uint16_t palette[64];
+    uint16_t palette[255];
     int stride;
 };
 
@@ -164,22 +167,22 @@ void run_to_vblank(bool display_frame)
           current_update->partial.stride = GAMEBOY_WIDTH;
           memcpy(current_update->partial.palette, scan.pal2, 64 * sizeof(uint16_t));
 
-	      odroid_buffer_diff(current_update->partial.buffer,
-                  old_update->partial.buffer, current_update->partial.palette, old_update->partial.palette,
-			  GAMEBOY_WIDTH, GAMEBOY_HEIGHT,
-			  current_update->partial.stride, PIXEL_MASK, 0, current_update->partial.diff);
-
-
-		  /* TODO: Figure out why interlacing doesnt work quite right. */
-		  /* field = 1 - field; */
-	      /* odroid_buffer_diff_interlaced(current_update->partial.buffer, */
-                  /* old_update->partial.buffer, current_update->partial.palette, old_update->partial.palette, */
-			  /* GAMEBOY_WIDTH, GAMEBOY_HEIGHT, */
-			  /* current_update->partial.stride, PIXEL_MASK, 0, field, current_update->partial.diff, old_update->partial.diff); */
-
+		  if (use_interlacing) {
+			  // TODO: Figure out why interlacing doesnt work quite right.
+			  field = 1 - field;
+			  odroid_buffer_diff_interlaced(current_update->partial.buffer,
+					  old_update->partial.buffer, current_update->partial.palette, old_update->partial.palette,
+				  GAMEBOY_WIDTH, GAMEBOY_HEIGHT,
+				  current_update->partial.stride, PIXEL_MASK, 0x80, field, current_update->partial.diff, old_update->partial.diff);
+		  } else {
+			  odroid_buffer_diff(current_update->partial.buffer,
+					  old_update->partial.buffer, current_update->partial.palette, old_update->partial.palette,
+				  GAMEBOY_WIDTH, GAMEBOY_HEIGHT,
+				  current_update->partial.stride, PIXEL_MASK, 0, current_update->partial.diff);
+		  }
 
 		   // TODO: determine right threshold and make it dependend on scale setting
-		  const int threshold = 16000;
+		  const int threshold = no_skips ? 999999 : 12000;
 		  int n_pixels = odroid_buffer_diff_count(current_update->partial.diff, GAMEBOY_HEIGHT);
 
 		  // State machine that does automatic frame skipping
@@ -511,6 +514,26 @@ odroid_ui_func_toggle_rc menu_gb_stretch_toggle(odroid_ui_entry *entry, odroid_g
     return ODROID_UI_FUNC_TOGGLE_RC_MENU_RESTART;
 }
 
+
+void menu_gb_use_interlacing_update(odroid_ui_entry *entry) {
+    sprintf(entry->text, "%-9s: %s", "interlace", use_interlacing ? "on" : "off");
+}
+
+odroid_ui_func_toggle_rc menu_gb_use_interlacing_toggle(odroid_ui_entry *entry, odroid_gamepad_state *joystick) {
+	use_interlacing = !use_interlacing;
+    return ODROID_UI_FUNC_TOGGLE_RC_CHANGED;
+}
+
+void menu_gb_no_skips_update(odroid_ui_entry *entry) {
+    sprintf(entry->text, "%-9s: %s", "no_skips", no_skips ? "on" : "off");
+}
+
+odroid_ui_func_toggle_rc menu_gb_no_skips_toggle(odroid_ui_entry *entry, odroid_gamepad_state *joystick) {
+	no_skips = !no_skips;
+    return ODROID_UI_FUNC_TOGGLE_RC_CHANGED;
+}
+
+
 void menu_gb_init(odroid_ui_window *window) {
     odroid_ui_create_entry(window, &menu_gb_pal_update, &menu_gb_pal_toggle);
     odroid_ui_create_entry(window, &menu_gb_rtc_day_update, &menu_gb_rtc_day_toggle);
@@ -519,6 +542,9 @@ void menu_gb_init(odroid_ui_window *window) {
 
     odroid_ui_create_entry(window, &menu_gb_partial_updates_update, &menu_gb_partial_updates_toggle);
     odroid_ui_create_entry(window, &menu_gb_stretch_update, &menu_gb_stretch_toggle);
+
+    odroid_ui_create_entry(window, &menu_gb_use_interlacing_update, &menu_gb_use_interlacing_toggle);
+    odroid_ui_create_entry(window, &menu_gb_no_skips_update, &menu_gb_no_skips_toggle);
 }
 
 void app_main(void)

@@ -80,6 +80,10 @@ static int sprdebug = 0;
 
 // Imported from main.c
 extern bool enable_partial_updates;
+extern bool use_interlacing;
+extern int field;
+
+static int current_line = 0;
 
 static byte *vdest;
 
@@ -654,6 +658,7 @@ static void IRAM_ATTR spr_scan()
 
 inline void lcd_begin()
 {
+	current_line = 0;
 	vdest = fb.ptr;
 	WY = R_WY;
 }
@@ -729,7 +734,9 @@ void IRAM_ATTR lcd_refreshline()
 		byte* src = BUF;
 
 		if (enable_partial_updates) {
-			memcpy(dest, src, cnt);
+			if (!use_interlacing || (current_line % 2) ^ field) {
+				memcpy(dest, src, cnt);
+			}
 		} else {
 			un16* dst = (un16*)dest;
 			while (cnt--) *(dst++) = PAL2[*(src++)];
@@ -741,6 +748,7 @@ void IRAM_ATTR lcd_refreshline()
 	} else {
 		vdest += fb.pitch;
 	}
+	current_line++;
 }
 
 //void change_palette(int i)
