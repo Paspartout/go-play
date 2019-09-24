@@ -162,21 +162,28 @@ void run_to_vblank(bool display_frame)
 
             current_update->partial.buffer = (uint8_t*)framebuffer;
             current_update->partial.stride = GAMEBOY_WIDTH;
+         
             memcpy(current_update->partial.palette, scan.pal2, 64 * sizeof(uint16_t));
 
             isNewFrame = true;
-            /*int interlace;
+            int interlace;
             if (interlace_first_run) {
-                interlace = -1;
-            } else { interlace = 0; }*/
-                
+                interlace = 0;
+            } else { interlace = 1; 
+            }
+            
+            interlace = 1 - interlace;
+            
+            for (int y = interlace_first_run ? 1 : 0; y < GAMEBOY_HEIGHT; y += 2){
+                current_update->partial.diff[y].width = 0;
+            }            
 
-            /*odroid_buffer_diff(current_update->partial.buffer,
+            odroid_buffer_diff_interlaced(current_update->partial.buffer,
                 old_update->partial.buffer, current_update->partial.palette, old_update->partial.palette,
                 GAMEBOY_WIDTH, GAMEBOY_HEIGHT,
-                current_update->partial.stride, PIXEL_MASK, 0, current_update->partial.diff);*/
-
-
+                current_update->partial.stride, PIXEL_MASK, 0, interlace, current_update->partial.diff, old_update->partial.diff);
+        
+            
 		  /* TODO: Figure out why interlacing doesnt work quite right. */
 		  /* field = 1 - field; */
 	      /* odroid_buffer_diff_interlaced(current_update->partial.buffer, */
@@ -296,9 +303,9 @@ void videoTask(void *arg)
 			}
 
 			ili9341_write_frame_8bit(update->partial.buffer,
-					NULL,
+					update->partial.diff,
 					GAMEBOY_WIDTH, GAMEBOY_HEIGHT, update->partial.stride, PIXEL_MASK, display_palette);
-
+            
 			if (force_screen_update) {
 				force_screen_update = false;
 			}
